@@ -5,12 +5,13 @@ class ghost_platform():
     def __init__(self):
         pygame.init()
         pygame.display.set_caption("Ghost Platform")
+        self.config()
         self.running=True
         self.game_over=False
         self.WIDTH =700
         self.HEIGHT=600
         self.screen=pygame.display.set_mode((self.WIDTH,self.HEIGHT))
-        self.manager = pygame_gui.UIManager((self.WIDTH,self.HEIGHT))
+        self.manager = pygame_gui.UIManager((self.WIDTH,self.HEIGHT),theme_path=os.path.join(self.config_path,"theme_buttons.json"))
         self.clock=pygame.time.Clock()
         self.FPS=60
         self.define_colors()
@@ -27,6 +28,8 @@ class ghost_platform():
         self.reward=0
         self.life=100
         self.state_life=[2,False]
+        self.active_buttons = []
+        self.draw_menus()
     def define_colors(self):
         self.GRAY=(127,127,127)
         self.WHITE=(255,255,255)
@@ -74,6 +77,8 @@ class ghost_platform():
         self.sound_game_lose=pygame.mixer.Sound(os.path.join(self.sound_path,"game_lose.flac"))
         self.sound_shield=pygame.mixer.Sound(os.path.join(self.sound_path,"shield.wav"))
         self.sound_exit=pygame.mixer.Sound(os.path.join(self.sound_path,"exitbutton.wav"))
+    def config(self):
+        self.config_path = os.path.join(os.path.dirname(__file__), "Config")
     def objects(self):
         self.object1=Rect(350, self.HEIGHT-35,25,25)
         self.object2=None
@@ -91,7 +96,6 @@ class ghost_platform():
             self.collision(rect,type_object,coords)
             setattr(self, object_name, rect)
             self.screen.blit(image,(coords[0]-restx,coords[1]-resty))
-            # pygame.draw.rect(self.screen,self.BLACK,rect)
     def collision(self,objects,type_object,coords):
         if self.object1.colliderect(objects):
             match type_object:
@@ -111,9 +115,11 @@ class ghost_platform():
                 case "potion" if self.life<100:
                     self.state_life[0]=1
                     self.reset_coords(coords)
+                    self.sound_health.play()
                 case "shield" if not self.state_life[1]:
                     self.state_life[1]=True
                     self.reset_coords(coords)
+                    self.sound_shield.play()
     def reset_coords(self,coords):
         coords[1]=random.choice(np.arange(-500, 0, 200))
         coords[0]=random.choice(np.arange(25, self.WIDTH-50, 115))
@@ -140,6 +146,7 @@ class ghost_platform():
             self.manager.process_events(event)
             self.event_quit(event)
             self.event_keydown(event)
+            self.event_buttons(event)
         self.pressed_keys=pygame.key.get_pressed()
         self.pressed_mouse=pygame.mouse.get_pressed()
         self.mouse_pos = pygame.mouse.get_pos()
@@ -151,16 +158,28 @@ class ghost_platform():
         self.game_over=True
     def event_keydown(self,event):
         if event.type==KEYDOWN:
-            if self.main==3 and event.key==K_p:self.main=-1
-            elif self.main==-1 and event.key==K_p:self.main=3
+            if self.main==3 and event.key==K_p:self.change_mains(-1,self.GRAY,20)
+            elif self.main==-1 and event.key==K_p:self.change_mains(3,self.GRAY)
             if event.key==K_SPACE or event.key==K_w:self.jump()
+    def event_buttons(self,event):
+        if event.type == pygame_gui.UI_BUTTON_PRESSED:
+            if self.main==0:self.buttons_main_menu(event)
+            if self.main==4:self.buttons_options_menu(event)
+    def buttons_main_menu(self,event):
+        if event.ui_element == self.play_button:self.change_mains(-1)
+        if event.ui_element == self.option_button:self.change_mains(4)
+        if event.ui_element == self.exit_button:self.close_game()
+    def buttons_options_menu(self,event):
+        if event.ui_element == self.visuals_button:self.change_mains(5)
+        if event.ui_element == self.sounds_button:self.change_mains(7)
+        if event.ui_element == self.keys_button:self.change_mains(6)
+        if event.ui_element == self.back_button:self.change_mains(0)
     def press_keys(self):
         if self.main==-1:
             if self.pressed_keys[K_d]:self.object1.x+=5
             if self.pressed_keys[K_a]:self.object1.x-=5
     def draw(self):
         self.screen.fill(self.background)
-        # pygame.draw.rect(self.screen, self.GREEN, self.object1)
         self.screen.blit(self.player,(self.object1.x-5,self.object1.y-5))
         self.bar_life()
         self.shield_draw()
@@ -179,22 +198,68 @@ class ghost_platform():
         self.screen.blit(self.font6.render("Life",True,self.life_color),(0,9))
     def shield_draw(self):
         if self.state_life[1]:pygame.draw.ellipse(self.screen,self.life_color,(self.object1.x-11,self.object1.y-15,50,50),3)
+    def draw_menus(self):
+        self.main_menu()
+        self.game_over_menu()
+        self.mode_game_menu()
+        self.pausa_menu()
+        self.menu_options()
+        self.visuals_menu()
+        self.keys_menu()
+        self.sounds_menu()
+    def fade_transition(self,fade_in,color=(0,0,0),limit=255):
+        overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
+        overlay.fill(color)
+        alpha=0
+        while not fade_in and alpha <= limit:
+            overlay.set_alpha(alpha)
+            self.screen.blit(overlay, (0, 0))
+            pygame.display.flip()
+            self.clock.tick(20)
+            alpha += -15 if fade_in else 15
+    def change_mains(self,main,color=(0,0,0),limit=255):
+        self.fade_transition(False,color,limit)
+        self.clear_buttons()
+        self.main=main
+        self.draw_menus()
+    def clear_buttons(self):
+        for button in self.active_buttons:button.kill()
+        self.active_buttons=[]
+    def filt(self,width,height,number,color=(0,0,0),position=(0,0)):
+        background=pygame.Surface((width,height),pygame.SRCALPHA)
+        background.fill((*color, number))
+        self.screen.blit(background,position)
     def main_menu(self):
-        if self.main==0:pass
+        if self.main==0:
+            self.screen.fill(self.BLACK)
+            self.screen.blit(self.font3.render("Ghost Platform",True,self.WHITE),(3,10))
+            self.play_button=pygame_gui.elements.UIButton(relative_rect=Rect(10, 100, 100, 50),text="Play",manager=self.manager)
+            self.option_button=pygame_gui.elements.UIButton(relative_rect=Rect(10, 150, 100, 50),text='Option',manager=self.manager)
+            self.exit_button=pygame_gui.elements.UIButton(relative_rect=Rect(10, 200, 100, 50),text='Exit',manager=self.manager)
+            self.active_buttons.extend([self.play_button, self.option_button, self.exit_button])
     def game_over_menu(self):
-        if self.main==1:pass
+        if self.main==1:self.filt(self.WIDTH,self.HEIGHT,150,self.RED)
     def mode_game_menu(self):
-        if self.main==2:pass
+        if self.main==2:self.screen.fill(self.BLACK)
     def pausa_menu(self):
-        if self.main==3:pass
+        if self.main==3:
+            self.filt(self.WIDTH,self.HEIGHT,150,self.GRAY)
+            self.screen.blit(self.font3.render("Pause", True, "White"),(3,10))
     def menu_options(self):
-        if self.main==4:pass
+        if self.main==4:
+            self.screen.fill(self.BLACK)
+            self.screen.blit(self.font3.render("Options", True, "White"),(3,10))
+            self.visuals_button=pygame_gui.elements.UIButton(relative_rect=Rect(10, 100, 100, 50),text="Visuals",manager=self.manager)
+            self.sounds_button=pygame_gui.elements.UIButton(relative_rect=Rect(10, 150, 100, 50),text='Sounds',manager=self.manager)
+            self.keys_button=pygame_gui.elements.UIButton(relative_rect=Rect(10, 200, 100, 50),text='Keys',manager=self.manager)
+            self.back_button=pygame_gui.elements.UIButton(relative_rect=Rect(10, self.HEIGHT-50, 100, 50),text='Back',manager=self.manager)
+            self.active_buttons.extend([self.visuals_button,self.sounds_button,self.keys_button,self.back_button])
     def visuals_menu(self):
-        if self.main==5:pass
+        if self.main==5:self.screen.fill(self.BLACK)
     def keys_menu(self):
-        if self.main==6:pass
+        if self.main==6:self.screen.fill(self.BLACK)
     def sounds_menu(self):
-        if self.main==7:pass
+        if self.main==7:self.screen.fill(self.BLACK)
     def run_with_model(self):
         self.running=True
         score=0
