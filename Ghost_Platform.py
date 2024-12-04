@@ -14,12 +14,11 @@ class ghost_platform(interface):
         self.down_gravity=0
         self.jumper=-11
         self.isjumper=False
-        self.reward=0
         self.life=100
         self.state_life=[2,False]
         self.floor_fall=False
         self.mode_game={"Training AI":False,"Player":True,"AI":False}
-        self.scores=reward=0
+        self.scores=self.reward=0
     def objects(self):
         self.object1=Rect(350, self.HEIGHT-35,25,25)
         self.object2=None
@@ -129,15 +128,24 @@ class ghost_platform(interface):
         self.life += 1 if self.state_life[0] == 1 else -1 if self.state_life[0] == 0 else 0
         states = {100: (2, self.GREEN),75: (2, self.SKYBLUE),50: (2, self.YELLOW),25: (2, self.RED)}
         if self.life in states:self.state_life[0], self.life_color = states[self.life]
-        elif self.life < 0:self.main,self.life_color,self.state_life[0] = (1,self.BLACK,2)
+        elif self.life < 0:
+            self.restart()
+            self.life_color,self.state_life[0] = (self.BLACK,2)
         self.screen.blit(self.font6.render("Life",True,self.life_color),(0,9))
     def shield_draw(self):
         if self.state_life[1]:pygame.draw.ellipse(self.screen,self.life_color,(self.object1.x-11,self.object1.y-15,50,50),3)
     def restart(self):
         if self.mode_game["Training AI"]:self.reset()
-        if self.mode_game["Player"] or self.mode_game["AI"]:self.change_mains(1)
+        if self.mode_game["Player"] or self.mode_game["AI"]:self.change_mains(1,self.RED,150,self.reset)
     def reset(self):
-        pass
+        self.FPS=60
+        self.objects()
+        self.nuances()
+        self.calls_elements()
+        self.life=100
+        self.state_life=[2,False]
+        self.floor_fall=False
+        self.scores=self.reward=0
     def run_with_model(self):
         self.running=True
         score=0
