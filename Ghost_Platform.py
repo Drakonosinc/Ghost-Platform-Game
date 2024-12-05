@@ -12,7 +12,7 @@ class ghost_platform(interface):
         self.nuances()
         self.gravity=0.25
         self.down_gravity=0
-        self.jumper=-11
+        self.jumper=-12
         self.isjumper=False
         self.life=100
         self.state_life=[2,False]
@@ -108,6 +108,7 @@ class ghost_platform(interface):
             if self.main==3 and event.key==K_p:self.change_mains(-1,self.GRAY,20)
             elif self.main==-1 and event.key==K_p:self.change_mains(3,self.GRAY)
             if event.key==K_SPACE or event.key==K_w:self.jump()
+            if self.main==1 and event.key==K_r:self.change_mains(-1,command=self.reset)
     def press_keys(self):
         if self.main==-1:
             if self.pressed_keys[K_d]:self.object1.x+=5
@@ -115,8 +116,7 @@ class ghost_platform(interface):
     def draw(self):
         self.screen.fill(self.background)
         self.screen.blit(self.player,(self.object1.x-5,self.object1.y-5))
-        self.bar_life()
-        self.shield_draw()
+        self.bar_life(),self.shield_draw()
     def jump(self):
         if self.isjumper:
             self.down_gravity=self.jumper
@@ -131,7 +131,7 @@ class ghost_platform(interface):
         elif self.life < 0:
             self.restart()
             self.life_color,self.state_life[0] = (self.BLACK,2)
-        self.screen.blit(self.font6.render("Life",True,self.life_color),(0,9))
+        if self.main==-1:self.screen.blit(self.font6.render("Life",True,self.life_color),(0,9))
     def shield_draw(self):
         if self.state_life[1]:pygame.draw.ellipse(self.screen,self.life_color,(self.object1.x-11,self.object1.y-15,50,50),3)
     def restart(self):
