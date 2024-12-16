@@ -1,9 +1,11 @@
 import random
 import numpy as np
 from Interface import *
+import torch
 class ghost_platform(interface):
-    def __init__(self):
+    def __init__(self,model=None):
         super().__init__(width=700, height=600)
+        self.model=model
         self.running=True
         self.game_over=False
         self.clock=pygame.time.Clock()
@@ -17,14 +19,15 @@ class ghost_platform(interface):
         self.life=100
         self.state_life=[2,False]
         self.floor_fall=False
-        self.mode_game={"Training AI":False,"Player":True,"AI":False}
+        self.mode_game={"Training AI":True,"Player":False,"AI":False}
         self.scores=self.reward=0
+        self.last_movement_time = pygame.time.get_ticks()  # Initialize movement timer
     def objects(self):
         self.object1=Rect(350, self.HEIGHT-35,25,25)
-        self.object2=None
-        self.object3=None
-        self.object4=None
-        self.object5=None
+        self.object2=Rect(0,0,0,0)
+        self.object3=Rect(0,0,0,0)
+        self.object4=Rect(0,0,0,0)
+        self.object5=Rect(0,0,0,0)
     def generate_nuances(self):
         return np.column_stack((np.random.choice(np.arange(25, self.WIDTH-50, 115), 15),np.random.choice(np.arange(-500, 0, 200), 15))).tolist()
     def nuances(self):self.matrix=[self.generate_nuances(),self.generate_nuances()]
@@ -43,23 +46,28 @@ class ghost_platform(interface):
                     self.object1.y=objects.y-25
                     self.down_gravity=0
                     self.isjumper=True
+                    if self.mode_game["Training AI"]:self.reward += 0.2
                 case "meteorite":
                     if not self.state_life[1]:
                         self.reset_coords(coords)
                         self.state_life[0]=0
                         self.sound_meteorite.play()
+                        if self.mode_game["Training AI"]:self.reward -= 20
                     else:
                         self.state_life[1]=False
                         self.reset_coords(coords)
                         self.sound_meteorite.play()
+                        if self.mode_game["Training AI"]:self.reward -= 5
                 case "potion" if self.life<100:
                     self.state_life[0]=1
                     self.reset_coords(coords)
                     self.sound_health.play()
+                    if self.mode_game["Training AI"]:self.reward += 10
                 case "shield" if not self.state_life[1]:
                     self.state_life[1]=True
                     self.reset_coords(coords)
                     self.sound_shield.play()
+                    if self.mode_game["Training AI"]:self.reward += 15
     def reset_coords(self,coords):
         coords[1]=random.choice(np.arange(-500, 0, 200))
         coords[0]=random.choice(np.arange(25, self.WIDTH-50, 115))
@@ -69,6 +77,10 @@ class ghost_platform(interface):
         self.elements([self.matrix[1][1]],2,"object4",35,25,"potion",self.potion,0,10)
         self.elements([self.matrix[1][2]],4,"object5",45,25,"shield",self.shield,5,10)
     def events(self):
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_movement_time > 5000:self.floor_fall = True
+        if self.object1.x < 0:self.object1.x = 0
+        elif self.object1.x > self.WIDTH - 25:self.object1.x = self.WIDTH - 25
         if not self.isjumper:self.fall()
         if self.object1.y>=self.HEIGHT-35 and not self.floor_fall:
             self.object1.y=self.HEIGHT-35
@@ -78,7 +90,9 @@ class ghost_platform(interface):
             if self.object1.y<=-20:
                 self.object1.y=-15
                 self.down_gravity=self.gravity
-            if self.object1.y>=self.HEIGHT+50:self.sounddeath()
+            if self.object1.y>=self.HEIGHT+50:
+                if self.mode_game["Training AI"]:self.reward -= 30
+                self.sounddeath()
     def sounddeath(self,sound=True):
         if sound:
             self.sound_game_lose.play(loops=0)
@@ -113,6 +127,7 @@ class ghost_platform(interface):
         if self.main==-1:
             if self.pressed_keys[K_d]:self.object1.x+=5
             if self.pressed_keys[K_a]:self.object1.x-=5
+            self.last_movement_time = pygame.time.get_ticks()  # Update movement timer
     def draw(self):
         self.screen.fill(self.background)
         self.screen.blit(self.player,(self.object1.x-5,self.object1.y-5))
@@ -145,13 +160,33 @@ class ghost_platform(interface):
         self.life=100
         self.state_life=[2,False]
         self.floor_fall=False
-        self.scores=self.reward=0
+        self.scores=0
+    def get_state(self):
+        return np.array([self.object1.x, self.object1.y, self.object2.x, self.object2.y,self.object3.x,self.object3.y,self.object4.x,self.object4.y,self.object5.x,self.object5.y])
+    def type_mode(self):
+        if self.mode_game["Training AI"]:self.actions_AI(self.model)
+        if self.mode_game["AI"]:self.actions_AI(self.model_training)
+    def actions_AI(self,model):
+        state=self.get_state()
+        action = model(torch.tensor(state, dtype=torch.float32)).detach().numpy()
+        self.AI_actions(action)
+    def softmax(self, x):
+        exp_x = np.exp(x - np.max(x))
+        return exp_x / exp_x.sum()
+    def AI_actions(self, action):
+        probabilities = self.softmax(action)
+        chosen_action = np.argmax(probabilities)
+        print(f"Probabilidades: {probabilities}, Acción elegida: {chosen_action}")
+        if chosen_action == 0:self.object1.x -= 5
+        elif chosen_action == 1:self.object1.x += 5
+        elif chosen_action == 2 and self.isjumper:self.jump()
     def run_with_model(self):
-        self.running=True
-        score=0
-        while self.running and self.game_over==False:
+        self.running = True
+        scores = self.reward = 0
+        while self.running and self.game_over == False:
             self.handle_keys()
-            if self.main==-1:
+            if self.main == -1:
+                if self.mode_game["AI"] or self.mode_game["Training AI"]:self.type_mode()
                 self.draw()
                 self.events()
                 self.calls_elements()
@@ -159,7 +194,7 @@ class ghost_platform(interface):
             self.manager.update(self.time_delta)
             self.manager.draw_ui(self.screen)
             pygame.display.flip()
-        return score
+        return scores
 
 if __name__ == "__main__":
     game=ghost_platform()
