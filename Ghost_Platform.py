@@ -31,14 +31,23 @@ class ghost_platform(interface):
     def generate_nuances(self):
         return np.column_stack((np.random.choice(np.arange(25, self.WIDTH-50, 115), 15),np.random.choice(np.arange(-500, 0, 200), 15))).tolist()
     def nuances(self):self.matrix=[self.generate_nuances(),self.generate_nuances()]
-    def elements(self,matrix,speed_fall,object_name,width,height,type_object,image=None,restx=0,resty=0):
+    def elements(self,matrix,speed_fall,object_name,width,height,type_object,image=None,restx=0,resty=0,object_name2=None,object_name3=None,current_elements=None,next_elements1=None,next_elements2=None):
         for coords in matrix:
             coords[1]+=speed_fall
             rect=Rect(coords[0],coords[1],width,height)
             if coords[1]>=self.HEIGHT:self.reset_coords(coords)
             self.collision(rect,type_object,coords)
-            setattr(self, object_name, rect)
             self.screen.blit(image,(coords[0]-restx,coords[1]-resty))
+        sorted_elements = sorted(matrix, key=lambda t: t[1],reverse=True)
+        for i, elements in enumerate(sorted_elements):
+            if elements[1] < self.object1.y:
+                current_elements = elements
+                next_elements1 = sorted_elements[i + 1] if i + 1 < len(sorted_elements) else None
+                next_elements2 = sorted_elements[i + 2] if i + 2 < len(sorted_elements) else None
+                break
+        if current_elements:setattr(self, object_name, Rect(current_elements[0],current_elements[1],width,height))
+        # if next_elements1:setattr(self, object_name2, Rect(next_elements1[0],next_elements1[1],width,height))
+        # if next_elements2:setattr(self, object_name3, Rect(next_elements2[0],next_elements2[1],width,height))
     def collision(self,objects,type_object,coords):
         if self.object1.colliderect(objects):
             match type_object:
@@ -162,6 +171,7 @@ class ghost_platform(interface):
         self.floor_fall=False
         self.scores=0
     def get_state(self):
+        print(self.object1.x, self.object1.y, self.object2.x, self.object2.y,self.object3.x,self.object3.y,self.object4.x,self.object4.y,self.object5.x,self.object5.y)
         return np.array([self.object1.x, self.object1.y, self.object2.x, self.object2.y,self.object3.x,self.object3.y,self.object4.x,self.object4.y,self.object5.x,self.object5.y])
     def type_mode(self):
         if self.mode_game["Training AI"]:self.actions_AI(self.model)
@@ -176,7 +186,7 @@ class ghost_platform(interface):
     def AI_actions(self, action):
         probabilities = self.softmax(action)
         chosen_action = np.argmax(probabilities)
-        print(f"Probabilidades: {probabilities}, Acción elegida: {chosen_action}")
+        # print(f"Probabilidades: {probabilities}, Acción elegida: {chosen_action}")
         if chosen_action == 0:self.object1.x -= 5
         elif chosen_action == 1:self.object1.x += 5
         elif chosen_action == 2 and self.isjumper:self.jump()
